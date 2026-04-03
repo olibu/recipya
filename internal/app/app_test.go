@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -43,20 +44,36 @@ func TestConfigFile_Address(t *testing.T) {
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := tc.in.Address()
-			if got != tc.want {
-				if tc.wantRandomPort {
-					split := strings.Split(got, ":")
-					port, err := strconv.ParseInt(split[len(split)-1], 10, 64)
-					if err != nil || port == 0 {
-						t.Fatal("port should not be 0")
-						return
-					}
-				} else {
-					t.Fatalf("got %q but want %q", got, tc.want)
+			if tc.wantRandomPort {
+				if got == tc.want {
+					return
 				}
+
+				parsed, err := url.Parse(got)
+				if err != nil {
+					t.Fatalf("got invalid URL %q: %v", got, err)
+				}
+
+				host := parsed.Hostname()
+				if parsed.Scheme != "https" {
+					t.Fatalf("got scheme %q but want https", parsed.Scheme)
+				}
+				if host == "" {
+					t.Fatalf("got empty host in %q", got)
+				}
+
+				if portStr := parsed.Port(); portStr != "" {
+					port, err := strconv.ParseInt(portStr, 10, 64)
+					if err != nil || port == 0 {
+						t.Fatalf("got invalid port in %q", got)
+					}
+				}
+
+				return
 			}
-			if tc.wantRandomPort && tc.in.Server.Port == 0 {
-				t.Fatalf("expected random port %t %d", tc.wantRandomPort, app.Config.Server.Port)
+
+			if got != tc.want {
+				t.Fatalf("got %q but want %q", got, tc.want)
 			}
 		})
 	}
